@@ -1,33 +1,32 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from config import Config
-from sqlalchemy import text
 from flask_cors import CORS
+from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager
+
+from config import Config
 
 db = SQLAlchemy()
+migrate = Migrate()
+jwt = JWTManager()
+
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Enable CORS
     CORS(app)
 
-    # init database
+    # Initialize extensions
     db.init_app(app)
+    migrate.init_app(app, db)
+    jwt.init_app(app)
 
-    with app.app_context():
-        try:
-            db.session.execute(text("SELECT 1"))
-            print("[INFO] Database connected successfully")
-        except Exception as e:
-            print(f"[ERROR] Database connection failed: {e}")
+    # Import models so Flask-Migrate can detect them
+    from app import models  # noqa: F401
 
-    # import models so tables are registered
-    from app import models  
-
-    from app import services
-
-    # register routes
+    # # Register routes
     from app.routes import register_routes
     register_routes(app)
 

@@ -1,16 +1,14 @@
+from dotenv import load_dotenv
+from datetime import timedelta
 import os
 
+load_dotenv()
 
-#D:\IISER 25-26\drive-application\deleted_folder
 class Config:
-    SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://postgres:Hk%402552004@localhost:5432/fcrit_filesystem"
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    UPLOAD_FOLDER = r"D:\IISER 25-26\drive-application\allocated_folder"
-    DELETED_FOLDER = r"D:\IISER 25-26\drive-application\deleted_folder"
-    ALLOCATED_SPACE = 1
-
-class DevelopmentConfig(Config):
-    DEBUG = True
-
-class ProductionConfig(Config):
-    DEBUG = False
+    LOCAL_STORAGE_PATH = os.getenv("LOCAL_STORAGE_PATH")
+    DELETED_FOLDER = os.getenv("DELETED_FOLDER")
+    ALLOCATED_SPACE_GB = int(os.getenv("ALLOCATED_SPACE_GB", 1))
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+    JWT_ACCESS_TOKEN_EXPIRED = timedelta(seconds=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 86400)))
