@@ -1,45 +1,42 @@
-import {FileItem} from '../types/file';
+import { FolderContents } from '../types/file';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export const getFiles = async (): Promise<FileItem[]> =>{
-    try{
-        const response = await fetch(`${API_BASE_URL}/getFiles`, {cache: 'no-store'});
-        if(!response.ok){
-            throw new Error(`Failed to fetch files: ${response.statusText}`);
-        }
+export const getFolderContents = async (folderId: number | string, token: string): Promise<FolderContents> => {
+  const response = await fetch(`${API_BASE_URL}/folders/${folderId}/contents`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
 
-        const files: FileItem[]= await response.json();
-        return files;
-    }catch(error){
-        console.log('Error in getFiles:', error);
-        return [];
-    }
-}
-
-export const getTrashedFiles = async (): Promise<FileItem[]> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/trash`, { cache: 'no-store' });
-    if (!response.ok) throw new Error('Failed to fetch trashed files');
-    return response.json();
-  } catch (error) {
-    console.error('getTrashedFiles error:', error);
-    return [];
+  if (!response.ok) {
+    throw new Error('Failed to fetch folder contents');
   }
+
+  const data = await response.json();
+  
+  // We add the 'type' property manually so our UI components know how to render icons
+  data.folders = data.folders.map((f: any) => ({ ...f, type: 'folder' }));
+  data.files = data.files.map((f: any) => ({ ...f, type: 'file' }));
+  
+  return data;
 };
 
-export const restoreFile = async (fileId: string): Promise<{ message: string }> => {
-  const response = await fetch(`${API_BASE_URL}/restore/${fileId}`, {
+export const createFolder = async (name: string, parentId: number | null, token: string) => {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/folders/`, {
     method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name, parent_id: parentId }),
   });
-  if (!response.ok) throw new Error('Failed to restore file');
-  return response.json();
-};
 
-export const deletePermanently = async (fileId: string): Promise<{ message: string }> => {
-  const response = await fetch(`${API_BASE_URL}/permanentlyDelete/${fileId}`, {
-    method: 'DELETE',
-  });
-  if (!response.ok) throw new Error('Failed to permanently delete file');
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create folder');
+  }
+
   return response.json();
 };

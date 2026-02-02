@@ -1,36 +1,41 @@
+// src/services/downloadSingleFile.ts
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export const downloadSingleFile = async (fileId: string, fileName:string): Promise<void> => {
+export const downloadSingleFile = async (fileId: string, fileName: string, token: string): Promise<void> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/downloadSingleFile/${fileId}`);
+    const response = await fetch(`${API_BASE_URL}/files/${fileId}/download`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
     if (!response.ok) {
-      // Try to parse error JSON, otherwise throw a generic error
       const errorData = await response.json().catch(() => null);
       throw new Error(errorData?.error || 'Download failed');
     }
 
-    // Get the file data as a Binary Large Object (blob)
+    // 1. Convert the response to a Blob (Binary Data)
     const blob = await response.blob();
     
-    // Create a temporary URL for the blob
+    // 2. Create a hidden URL for this binary data
     const url = window.URL.createObjectURL(blob);
     
-    // Create a temporary <a> element to trigger the download
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName; // Set the desired file name
-    document.body.appendChild(a); // Append to the DOM
-    a.click(); // Programmatically click the link
+    // 3. Create a temporary "anchor" element to trigger the browser's save dialog
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName); // Force the filename
+    document.body.appendChild(link);
     
-    // Clean up by removing the element and revoking the URL
-    a.remove();
+    link.click(); // Programmatically click it
+    
+    // 4. Cleanup: Remove the link and revoke the URL to free memory
+    link.parentNode?.removeChild(link);
     window.URL.revokeObjectURL(url);
 
   } catch (error) {
     console.error('Download error:', error);
-    // Re-throw the error so the component can handle it (e.g., show an alert)
     throw error;
   }
 };

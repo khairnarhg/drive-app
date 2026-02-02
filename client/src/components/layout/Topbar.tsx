@@ -1,12 +1,25 @@
-'use client'
+'use client';
 
-import { Search, Bell, Settings, LogOut } from 'lucide-react';
+import { Search, Bell, Settings, LogOut, Moon, Sun } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useTheme } from 'next-themes';
-import { Moon, Sun } from 'lucide-react';
+import { logoutAction } from '@/lib/actions/auth'; // Import logout
+import { useState, useCallback, useEffect  } from 'react';
 
-const Topbar = () => {
+interface TopbarProps {
+    userData?: {
+        first_name: string;
+        last_name: string;
+        email: string;
+    } | null;
+}
+
+const Topbar = ({ userData }: TopbarProps) => {
     const { theme, setTheme } = useTheme();
+
+    useEffect(() => {
+        console.log("User Data in Topbar:", userData);
+    }, []);
 
     return (
         <header className="flex items-center justify-between p-2 h-14 bg-mac-header dark:bg-mac-header-dark backdrop-blur-md border-b border-gray-200 dark:border-gray-700/60 shadow-header dark:shadow-header-dark">
@@ -23,32 +36,59 @@ const Topbar = () => {
             </div>
 
             {/* Right side controls */}
-            <div className="flex items-center space-x-4">
-                <button className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+            <div className="flex items-center space-x-4 pr-2">
+                {/* Greeting Text */}
+                {userData && (
+                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                        Hi, <span className="text-black dark:text-white">{userData.first_name} {userData.last_name}</span>
+                    </span>
+                )}
+
+                <button className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     <Bell className="w-5 h-5" />
                 </button>
-                <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                
+                <button 
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
+                    className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
                     {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
 
                 {/* Profile Dropdown */}
                 <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                        <button className="w-8 h-8 rounded-full overflow-hidden">
-                            <img src="https://avatar.vercel.sh/nextjs" alt="User Avatar" />
+                        <button className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-mac-selection">
+                            <img 
+                                src={`https://avatar.vercel.sh/${userData?.email || 'guest'}`} 
+                                alt="User Avatar" 
+                            />
                         </button>
                     </DropdownMenu.Trigger>
+                    
                     <DropdownMenu.Portal>
                         <DropdownMenu.Content
-                            className="w-48 bg-white dark:bg-zinc-800 shadow-lg rounded-lg p-2 mt-2 border border-gray-200 dark:border-zinc-700 animate-context-menu-in"
+                            className="w-56 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-xl shadow-2xl rounded-xl p-1.5 mt-2 border border-gray-200 dark:border-zinc-700 animate-context-menu-in z-50"
                             sideOffset={5}
+                            align="end"
                         >
-                            <DropdownMenu.Item className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer outline-none hover:bg-gray-100 dark:hover:bg-zinc-700">
+                            <div className="px-2 py-2 mb-1">
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Account</p>
+                                <p className="text-sm font-medium truncate">{userData?.email}</p>
+                            </div>
+
+                            <DropdownMenu.Item className="flex items-center gap-2 px-2 py-2 text-sm rounded-lg cursor-pointer outline-none hover:bg-mac-selection hover:text-white transition-colors">
                                 <Settings className="w-4 h-4" />
                                 <span>Settings</span>
                             </DropdownMenu.Item>
+
                             <DropdownMenu.Separator className="h-[1px] bg-gray-200 dark:bg-zinc-700 my-1" />
-                            <DropdownMenu.Item className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer outline-none text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10">
+
+                            {/* Logout triggered here */}
+                            <DropdownMenu.Item 
+                                onClick={() => logoutAction()}
+                                className="flex items-center gap-2 px-2 py-2 text-sm rounded-lg cursor-pointer outline-none text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                            >
                                 <LogOut className="w-4 h-4" />
                                 <span>Logout</span>
                             </DropdownMenu.Item>

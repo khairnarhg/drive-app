@@ -3,125 +3,82 @@
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as Dialog from '@radix-ui/react-dialog';
-import { UploadCloud, X, CheckCircle, AlertCircle } from 'lucide-react';
-import { uploadFiles } from '../../services/uploadService';
+import { UploadCloud, X, Loader2 } from 'lucide-react';
+import { uploadFiles } from '@/services/uploadService';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploadComplete?: (message: string) => void;
+  onUploadComplete?: () => void;
+  currentFolderId?: number;
+  token: string;
 }
 
-const UploadModal = ({ isOpen, onClose, onUploadComplete }: UploadModalProps) => {
+const UploadModal = ({ isOpen, onClose, onUploadComplete, currentFolderId, token }: UploadModalProps) => {
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [statusMessage, setStatusMessage] = useState('');
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
     setIsUploading(true);
-    setUploadStatus('idle');
-    
     try {
-      // Convert File[] to FileList-like object
-      const fileList = {
-        ...acceptedFiles,
-        length: acceptedFiles.length,
-        item: (index: number) => acceptedFiles[index] || null,
-        [Symbol.iterator]: function* () {
-          for (let i = 0; i < acceptedFiles.length; i++) {
-            yield acceptedFiles[i];
-          }
-        }
-      } as FileList;
-
-      // Call upload service
-      const response = await uploadFiles(fileList);
-      
-      setUploadStatus('success');
-      setStatusMessage(response.message);
-      
-      // Notify parent component
-      onUploadComplete?.(response.message);
-      
-      // Auto-close modal after 2 seconds on success
-      setTimeout(() => {
-        onClose();
-        setUploadStatus('idle');
-        setStatusMessage('');
-      }, 2000);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      setUploadStatus('error');
-      setStatusMessage(errorMessage);
-      console.error('Upload error:', error);
+      await uploadFiles(acceptedFiles, currentFolderId, token);
+      onUploadComplete?.(); // Refresh FileExplorer list
+      onClose(); // Close modal
+    } catch (error: any) {
+      alert(`Upload failed: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
-  }, [onClose, onUploadComplete]);
+  }, [currentFolderId, onClose, onUploadComplete, token]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
     disabled: isUploading 
   });
 
-  const handleClose = () => {
-    if (!isUploading) {
-      onClose();
-      setUploadStatus('idle');
-      setStatusMessage('');
-    }
-  };
-
   return (
-    <Dialog.Root open={isOpen} onOpenChange={handleClose}>
+    <Dialog.Root open={isOpen} onOpenChange={isUploading ? undefined : onClose}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white dark:bg-zinc-800 p-6 shadow-lg animate-dialog-in">
-          <Dialog.Title className="text-lg font-semibold">Upload Files</Dialog.Title>
-          <Dialog.Description className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Drag and drop files here, or click to select files.
-          </Dialog.Description>
+        <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white dark:bg-zinc-900 p-8 shadow-2xl z-50 animate-dialog-in border border-gray-200 dark:border-zinc-800">
+          
+          <div className="text-center mb-6">
+            <Dialog.Title className="text-xl font-bold dark:text-white text-center mb-1">
+              Upload Files
+            </Dialog.Title>
+            <p className="text-sm text-gray-500 mt-1">Select files to add to your drive</p>
+          </div>
 
           <div
             {...getRootProps()}
-            className={`mt-4 p-12 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors
-            ${isDragActive ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/50' : 
-              isUploading ? 'border-gray-200 bg-gray-50 dark:bg-gray-700 cursor-not-allowed' :
-              'border-gray-300 dark:border-gray-600 hover:border-gray-400'}`}
+            className={`relative p-12 border-2 border-dashed rounded-xl text-center cursor-pointer transition-all
+            ${isDragActive ? 'border-mac-selection bg-blue-50/50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600'}
+            ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            <input {...getInputProps()} disabled={isUploading} />
+            <input {...getInputProps()} />
             
             {isUploading ? (
-              <>
-                <div className="w-12 h-12 mx-auto border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <p className="mt-2 text-sm text-gray-500">Uploading...</p>
-              </>
-            ) : uploadStatus === 'success' ? (
-              <>
-                <CheckCircle className="w-12 h-12 mx-auto text-green-500" />
-                <p className="mt-2 text-sm text-green-600">{statusMessage}</p>
-              </>
-            ) : uploadStatus === 'error' ? (
-              <>
-                <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
-                <p className="mt-2 text-sm text-red-600">{statusMessage}</p>
-              </>
+              <div className="flex flex-col items-center">
+                <Loader2 className="w-12 h-12 text-mac-selection animate-spin" />
+                <p className="mt-4 text-sm font-medium text-mac-selection">Processing files...</p>
+              </div>
             ) : (
               <>
-                <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
-                <p className="mt-2 text-sm text-gray-500">
-                  {isDragActive ? 'Drop the files here...' : 'Drag files here or click to upload'}
+                <div className="w-16 h-16 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <UploadCloud className={`w-8 h-8 ${isDragActive ? 'text-mac-selection' : 'text-gray-400'}`} />
+                </div>
+                <p className="text-sm font-medium dark:text-white">
+                  {isDragActive ? 'Drop them now!' : 'Drag & drop files here'}
                 </p>
+                <p className="text-xs text-gray-500 mt-2">or click to browse from computer</p>
               </>
             )}
           </div>
           
           {!isUploading && (
             <Dialog.Close asChild>
-              <button className="absolute top-4 right-4 p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </Dialog.Close>

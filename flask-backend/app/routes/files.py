@@ -15,104 +15,68 @@ files_bp = Blueprint("files", __name__, url_prefix="/files")
 
 @files_bp.route("/upload", methods=["POST"])
 @jwt_required()
-def upload_file():
+def upload_files():
     user_id = get_jwt_identity()
-    storage_key = None # Initialize for rollback scope
+    user = User.query.get(user_id)
+    
+    if "files" not in request.files:
+        return jsonify({"error": "No files part in the request"}), 400
 
-    try:
-        # 1. Validate File Input
-        if "file" not in request.files:
-            return jsonify({"error": "No file part in the request"}), 400
+    files = request.files.getlist("files") # Get all files from the 'files' key
+    folder_id = request.form.get("folder_id")
+    
+    # Handle folder validation once
+    target_folder_id = None
+    if folder_id and folder_id.lower() != 'null':
+        folder = Folder.query.filter_by(id=folder_id, owner_id=user_id).first()
+        if not folder:
+            return jsonify({"error": "Invalid folder"}), 404
+        target_folder_id = folder.id
 
-        file = request.files["file"]
+    results = []
+    errors = []
 
-        if file.filename == "":
-            return jsonify({"error": "No selected file"}), 400
+    for file in files:
+        if file.filename == "": continue
 
-        # 2. Validate User & Quota
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-
-        # Calculate size efficiently
-        file.stream.seek(0, 2) # Move to end
-        file_size = file.stream.tell()
-        file.stream.seek(0) # Reset to beginning
-
-        if user.used_quota + file_size > user.total_quota:
-            logger.warning(f"User {user_id} attempted to exceed quota. Current: {user.used_quota}, File: {file_size}")
-            return jsonify({"error": "Storage quota exceeded"}), 403
-
-        # 3. Validate Folder (Optional)
-        folder_id = request.form.get("folder_id")
-        folder = None
-        
-        if folder_id:
-            # Handle case where folder_id might be "null" string from some frontends
-            if folder_id.lower() != 'null' and folder_id != '':
-                folder = Folder.query.filter_by(
-                    id=folder_id,
-                    owner_id=user_id
-                ).first()
-                
-                if not folder:
-                    return jsonify({"error": "Invalid folder or access denied"}), 404
-
-        # 4. Save to Storage (Disk/S3)
-        # We do this BEFORE DB commit. If this fails, we catch it and abort.
         try:
+            # 1. Quota Check
+            file.stream.seek(0, 2)
+            file_size = file.stream.tell()
+            file.stream.seek(0)
+
+            if user.used_quota + file_size > user.total_quota:
+                errors.append({"file": file.filename, "error": "Quota exceeded"})
+                continue
+
+            # 2. Save to Disk
             storage = LocalStorageService(current_app.config["LOCAL_STORAGE_PATH"])
             storage_key = storage.save(file.stream)
-        except Exception as e:
-            logger.error(f"Storage write failed for user {user_id}: {str(e)}")
-            return jsonify({"error": "Failed to save file content"}), 500
 
-        # 5. Database Record Creation
-        try:
+            # 3. DB Entry
             mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
-
             db_file = File(
                 name=file.filename,
                 size=file_size,
                 mime_type=mime_type,
                 owner_id=user_id,
-                folder_id=folder.id if folder else None,
+                folder_id=target_folder_id,
                 storage_key=storage_key
             )
-
             user.used_quota += file_size
-            
             db.session.add(db_file)
-            db.session.commit()
-            
-            logger.info(f"File uploaded successfully: {db_file.id} by user {user_id}")
+            db.session.commit() # Commit per file to ensure partial success works
 
-            return jsonify({
-                "id": db_file.id,
-                "name": db_file.name,
-                "size": db_file.size,
-            }), 201
+            results.append({"id": db_file.id, "name": db_file.name})
 
-        except SQLAlchemyError as e:
+        except Exception as e:
             db.session.rollback()
-            logger.error(f"Database commit failed for file upload: {str(e)}")
-            
-            # CRITICAL: Clean up the file from disk if DB fails to avoid "orphan" files
-            if storage_key:
-                try:
-                    # Assuming LocalStorageService has a delete method, or using os directly
-                    # storage.delete(storage_key) 
-                    os.remove(os.path.join(current_app.config["LOCAL_STORAGE_PATH"], storage_key))
-                    logger.info(f"Rolled back file from storage: {storage_key}")
-                except Exception as cleanup_error:
-                    logger.critical(f"Failed to cleanup orphan file {storage_key}: {str(cleanup_error)}")
+            errors.append({"file": file.filename, "error": str(e)})
 
-            return jsonify({"error": "Database error occurred during upload"}), 500
-
-    except Exception as e:
-        # Catch-all for unexpected server errors
-        logger.error(f"Unexpected error in upload route: {str(e)}")
-        return jsonify({"error": "An internal server error occurred"}), 500
+    return jsonify({
+        "uploaded": results,
+        "errors": errors
+    }), 201 if results else 400
 
 
 @files_bp.route("/<int:file_id>/download", methods=["GET"])

@@ -32,15 +32,15 @@ const FileListItem = ({ file, isSelected, onSelect }: FileListItemProps) => {
           : <div className="flex-shrink-0">{getFileIcon(file.name)}</div>}
         <span className="truncate">{file.name}</span>
       </div>
-      <div className={cn("truncate", isSelected ? "text-gray-200" : "text-gray-600 dark:text-gray-400")}>
+      {/* <div className={cn("truncate", isSelected ? "text-gray-200" : "text-gray-600 dark:text-gray-400")}>
         {file.size ? formatBytes(file.size) : '—'}
-      </div>
+      </div> */}
       <div className={cn("truncate", isSelected ? "text-gray-200" : "text-gray-600 dark:text-gray-400")}>
         {fileType}
       </div>
-      <div className={cn("truncate", isSelected ? "text-gray-200" : "text-gray-600 dark:text-gray-400")}>
+      {/* <div className={cn("truncate", isSelected ? "text-gray-200" : "text-gray-600 dark:text-gray-400")}>
         {new Date(file.modifiedAt).toLocaleDateString()}
-      </div>
+      </div> */}
     </motion.div>
   );
 };

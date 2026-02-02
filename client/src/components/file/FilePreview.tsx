@@ -1,42 +1,62 @@
+'use client';
+
 import { motion } from 'framer-motion';
-import { X, Folder, FileText, Download, Share2, Trash2, Edit } from 'lucide-react';
+import { X, Folder, FileText, Download, Trash2 } from 'lucide-react';
 import { FileItem } from '@/types/file';
 import { formatBytes } from '@/lib/utils';
-import { deleteSingleFile } from '@/services/deleteSingleFIle';
 import { downloadSingleFile } from '@/services/downloadSingleFile';
+import { getTrashedFiles } from '@/services/trashService'; // Import the new service
 import { useState } from 'react';
 
 interface FilePreviewProps {
   file: FileItem;
   onClose: () => void;
   onDeleteComplete: () => void;
+  token?: string;
 }
 
-const FilePreview = ({ file, onClose, onDeleteComplete }: FilePreviewProps) => {
+const FilePreview = ({ file, onClose, onDeleteComplete, token }: FilePreviewProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
-  const handleDelete = async () => {
-    // Add a confirmation dialog for a better user experience
-    const isConfirmed = window.confirm(`Are you sure you want to delete "${file.name}"?`);
-    if (!isConfirmed) {
+  const [isTrashing, setIsTrashing] = useState(false);
+
+  // Updated Handle Trash Logic
+  const handleTrash = async () => {
+    if (!token) {
+      alert("Authentication error: Token missing.");
       return;
     }
 
+    const isConfirmed = window.confirm(`Move "${file.name}" to trash?`);
+    if (!isConfirmed) return;
+
+    setIsTrashing(true);
     try {
-      const response = await deleteSingleFile(file.id);
-      alert(response.message); // Show success message
-      onDeleteComplete(); // Notify the parent to refresh the file list
-      onClose(); // Close the preview pane
+      const response = await getTrashedFiles(token);
+      console.log('Trash success:', response.message);
+      
+      onDeleteComplete(); // Refresh the file list in FileExplorer
+      onClose(); // Close the sidebar
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      console.error('Delete error:', error);
       alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsTrashing(false);
     }
   };
 
   const handleDownload = async () => {
+    if (file.type === 'folder') {
+      alert("Folder download is not supported yet.");
+      return;
+    }
+
     setIsDownloading(true);
     try {
-      await downloadSingleFile(file.id, file.name);
+      if (!token) {
+        alert("Authentication error: Token missing.");
+        return;
+      }
+      await downloadSingleFile(file.id, file.name, token);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       alert(`Download failed: ${errorMessage}`);
@@ -45,14 +65,13 @@ const FilePreview = ({ file, onClose, onDeleteComplete }: FilePreviewProps) => {
     }
   };
 
-
   return (
     <motion.aside
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="w-80 border-l border-gray-200 dark:border-gray-700/60 bg-white dark:bg-[#2a2a2a] flex flex-col flex-shrink-0"
+      className="w-80 border-l border-gray-200 dark:border-gray-700/60 bg-white dark:bg-[#2a2a2a] flex flex-col flex-shrink-0 z-40"
     >
       <div className="flex items-center justify-between p-4 border-b dark:border-gray-700/60">
         <h3 className="font-semibold">Details</h3>
@@ -71,28 +90,50 @@ const FilePreview = ({ file, onClose, onDeleteComplete }: FilePreviewProps) => {
           <p className="mt-4 text-center font-medium truncate w-full">{file.name}</p>
         </div>
 
-        <div className="text-center font-small truncate ">Download the file to view*</div>
+        <div className="text-center text-xs text-gray-500 italic">
+          Download the file to view content*
+        </div>
 
         <div className="flex justify-center gap-2">
-            <button 
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="p-2 flex-1 flex flex-col items-center text-xs rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 disabled:opacity-50"
-            >
-              <Download className="w-4 h-4 mb-1"/>
-              {isDownloading ? 'Downloading...' : 'Download'}
-            </button>
-            {/* <button className="p-2 flex-1 flex flex-col items-center text-xs rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"><Share2 className="w-4 h-4 mb-1"/>Share</button>
-            <button className="p-2 flex-1 flex flex-col items-center text-xs rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"><Edit className="w-4 h-4 mb-1"/>Rename</button> */}
-            <button onClick={handleDelete} className="p-2 flex-1 flex flex-col items-center text-xs rounded-lg text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/50 dark:hover:bg-red-900"><Trash2 className="w-4 h-4 mb-1"/>Delete</button>
+          <button 
+            onClick={handleDownload}
+            disabled={isDownloading || isTrashing}
+            className="p-2 flex-1 flex flex-col items-center text-xs rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+          >
+            <Download className="w-4 h-4 mb-1"/>
+            {isDownloading ? 'Downloading...' : 'Download'}
+          </button>
+
+          <button 
+            onClick={handleTrash} 
+            disabled={isTrashing || isDownloading}
+            className="p-2 flex-1 flex flex-col items-center text-xs rounded-lg text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+          >
+            <Trash2 className="w-4 h-4 mb-1"/>
+            {isTrashing ? 'Trashing...' : 'Trash'}
+          </button>
         </div>
 
         <div>
-            <h4 className="font-semibold mb-2">Properties</h4>
-            <div className="text-sm space-y-2">
-                <div className="flex justify-between"><span>Type:</span> <span className="text-gray-500 dark:text-gray-400">{file.type}</span></div>
-                {file.size && <div className="flex justify-between"><span>Size:</span> <span className="text-gray-500 dark:text-gray-400">{formatBytes(file.size)}</span></div>}
-                <div className="flex justify-between"><span>Modified:</span> <span className="text-gray-500 dark:text-gray-400">{new Date(file.modifiedAt).toLocaleString()}</span></div>
+            <h4 className="font-semibold mb-2 text-sm text-gray-400 uppercase tracking-wider">Properties</h4>
+            <div className="text-sm space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Type</span> 
+                  <span className="font-medium">{file.type === 'folder' ? 'Folder' : 'File'}</span>
+                </div>
+                {file.size && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Size</span> 
+                    <span className="font-medium">{formatBytes(file.size)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Modified</span> 
+                  <span className="font-medium text-right">
+                    {/* Check if modifiedAt exists, fallback to created_at if needed */}
+                    {new Date(file.created_at).toLocaleDateString()}
+                  </span>
+                </div>
             </div>
         </div>
       </div>
