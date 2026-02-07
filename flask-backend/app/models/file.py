@@ -13,7 +13,7 @@ class File(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     folder_id = db.Column(db.Integer, db.ForeignKey("folders.id"), nullable=True)
 
-    storage_key = db.Column(db.String(512), nullable=False, unique=True)
+    storage_key = db.Column(db.String(512), nullable=True, unique=True)  # NULL when status=DELETED
     content_hash = db.Column(db.String(64), index=True)
 
     status = db.Column(

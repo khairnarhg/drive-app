@@ -5,7 +5,7 @@ import { X, Folder, FileText, Download, Trash2 } from 'lucide-react';
 import { FileItem } from '@/types/file';
 import { formatBytes } from '@/lib/utils';
 import { downloadSingleFile } from '@/services/downloadSingleFile';
-import { getTrashedFiles } from '@/services/trashService'; // Import the new service
+import { moveFileToTrash } from '@/services/trashService';
 import { useState } from 'react';
 
 interface FilePreviewProps {
@@ -19,10 +19,13 @@ const FilePreview = ({ file, onClose, onDeleteComplete, token }: FilePreviewProp
   const [isDownloading, setIsDownloading] = useState(false);
   const [isTrashing, setIsTrashing] = useState(false);
 
-  // Updated Handle Trash Logic
   const handleTrash = async () => {
     if (!token) {
       alert("Authentication error: Token missing.");
+      return;
+    }
+    if (file.type === 'folder') {
+      alert("Moving folders to trash is not supported yet.");
       return;
     }
 
@@ -31,11 +34,9 @@ const FilePreview = ({ file, onClose, onDeleteComplete, token }: FilePreviewProp
 
     setIsTrashing(true);
     try {
-      const response = await getTrashedFiles(token);
-      console.log('Trash success:', response.message);
-      
-      onDeleteComplete(); // Refresh the file list in FileExplorer
-      onClose(); // Close the sidebar
+      await moveFileToTrash(file.id, token);
+      onDeleteComplete();
+      onClose();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       alert(`Error: ${errorMessage}`);

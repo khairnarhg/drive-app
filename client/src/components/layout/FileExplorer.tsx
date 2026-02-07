@@ -14,7 +14,10 @@ import ContextMenu from '../common/ContextMenu';
 import UploadModal from '../file/UploadModal';
 import { createFolder } from '@/services/filesFetchService';
 import NewFolderModal from '../file/NewFolderModel';
-import { getTrashedFiles } from '@/services/trashService';
+import { getTrashedFiles, moveFileToTrash, restoreFile, deleteFilePermanently } from '@/services/trashService';
+import { downloadSingleFile } from '@/services/downloadSingleFile';
+import { getStorageStats } from '@/services/getStorageStats';
+import type { StorageStats } from '@/services/getStorageStats';
 import TrashView from './TrashView';
 
 
@@ -39,11 +42,21 @@ const FileExplorer = ({ userData, initialFolderId, token }: FileExplorerProps) =
   const [pathStack, setPathStack] = useState<{id: number, name: string}[]>([]);
   const [isNewFolderModalOpen, setNewFolderModalOpen] = useState(false);
   const [trashedFiles, setTrashedFiles] = useState<FileItem[]>([]);
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // --- Logic: Combine Folders and Files for the UI ---
-  const allItems = currentFolder 
-    ? [...currentFolder.folders, ...currentFolder.files] 
+  const allItems = currentFolder
+    ? [...currentFolder.folders, ...currentFolder.files]
     : [];
+  const pathLabel = pathStack.map((p) => p.name).join(' / ') || 'My Drive';
+  const searchResults =
+    searchQuery.trim() === ''
+      ? allItems
+      : allItems.filter((item) =>
+          item.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        );
+  const isSearchMode = searchQuery.trim().length > 0;
 
   // --- API Call: Fetch Folder Contents ---
   const fetchContents = useCallback(async (folderId: number) => {
@@ -65,10 +78,29 @@ const FileExplorer = ({ userData, initialFolderId, token }: FileExplorerProps) =
     }
   }, [initialFolderId, fetchContents]);
 
+  const fetchStorageStats = useCallback(async () => {
+    try {
+      const stats = await getStorageStats(token);
+      setStorageStats(stats);
+    } catch {
+      setStorageStats(null);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchStorageStats();
+  }, [fetchStorageStats]);
+
   // --- Handlers ---
   const handleSelectFile = (file: FileItem) => {
-    setSelectedFile(prev => (prev?.id === file.id ? null : file));
+    if (file.type === 'folder') return;
+    setSelectedFile(prev =>
+      prev?.type === file.type && prev?.id === file.id ? null : file
+    );
   };
+
+  const isItemSelected = (item: FileItem) =>
+    selectedFile?.type === item.type && selectedFile?.id === item.id;
 
 
 
@@ -76,6 +108,7 @@ const FileExplorer = ({ userData, initialFolderId, token }: FileExplorerProps) =
     if (currentFolder) {
       fetchContents(currentFolder.id);
     }
+    fetchStorageStats();
   };
 
 useEffect(() => {
@@ -85,15 +118,13 @@ useEffect(() => {
   }
 }, [currentFolder, pathStack.length]);
 
-const handleFolderDoubleClick = (folder: FileItem) => {
-  const folderId = Number(folder.id);
-  
-  // PREVENT BUG: Don't add to stack if we are already in this folder
-  if (pathStack.some(item => item.id === folderId)) return;
-
-  fetchContents(folderId);
-  setPathStack(prev => [...prev, { id: folderId, name: folder.name }]);
-};
+  const handleFolderDoubleClick = (item: FileItem) => {
+    if (item.type !== 'folder') return;
+    const folderId = Number(item.id);
+    if (pathStack.some(p => p.id === folderId)) return;
+    fetchContents(folderId);
+    setPathStack(prev => [...prev, { id: folderId, name: item.name }]);
+  };
 
 const navigateToPath = (index: number) => {
   const target = pathStack[index];
@@ -107,9 +138,10 @@ const handleCreateFolder = async (name: string) => {
   try {
     await createFolder(name, currentFolder?.id || initialFolderId, token);
     setNewFolderModalOpen(false);
-    fetchContents(currentFolder?.id || initialFolderId); // Refresh
-  } catch (err: any) {
-    alert(err.message);
+    fetchContents(currentFolder?.id || initialFolderId);
+    fetchStorageStats();
+  } catch (err: unknown) {
+    alert(err instanceof Error ? err.message : 'Failed to create folder');
   } finally {
     setLoading(false);
   }
@@ -139,19 +171,51 @@ const fetchTrash = useCallback(async () => {
     }
   }, [activeView, fetchTrash]);
 
-  // Handle Restore and Permanent Delete (Placeholder handlers)
   const handleRestore = async (fileId: string) => {
-    // Implement restore logic similar to trash logic but with status='ACTIVE'
-    console.log("Restoring:", fileId);
-    fetchTrash(); // Refresh after action
+    try {
+      await restoreFile(fileId, token);
+      fetchTrash();
+      fetchStorageStats();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to restore');
+    }
   };
 
   const handleDeletePermanently = async (fileId: string) => {
-    const isConfirmed = window.confirm("Delete permanently? This cannot be undone.");
-    if (isConfirmed) {
-      console.log("Deleting permanently:", fileId);
-      // Call permanent delete API
+    const isConfirmed = window.confirm('Delete permanently? This cannot be undone.');
+    if (!isConfirmed) return;
+    try {
+      await deleteFilePermanently(fileId, token);
       fetchTrash();
+      fetchStorageStats();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to delete');
+    }
+  };
+
+  const handleMoveToTrash = async (file: FileItem) => {
+    if (file.type === 'folder') {
+      alert('Moving folders to trash is not supported yet.');
+      return;
+    }
+    try {
+      await moveFileToTrash(file.id, token);
+      if (currentFolder) fetchContents(currentFolder.id);
+      fetchStorageStats();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to move to trash');
+    }
+  };
+
+  const handleDownload = async (file: FileItem) => {
+    if (file.type === 'folder') {
+      alert('Folder download is not supported.');
+      return;
+    }
+    try {
+      await downloadSingleFile(file.id, file.name, token);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Download failed');
     }
   };
   
@@ -159,10 +223,14 @@ const fetchTrash = useCallback(async () => {
   return (
   <div className="flex h-screen bg-white dark:bg-[#1e1e1e]">
     {/* Sidebar handles view switching between 'drive' and 'trash' */}
-    <Sidebar activeView={activeView} onViewChange={setActiveView} />
+    <Sidebar activeView={activeView} onViewChange={setActiveView} storageStats={storageStats} />
     
     <div className="flex-1 flex flex-col pl-60">
-      <Topbar userData={userData} />
+      <Topbar
+                userData={userData}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+              />
       
       <div className="flex-1 flex overflow-hidden">
         <main className="flex-1 flex flex-col p-4 overflow-y-auto">
@@ -183,7 +251,11 @@ const fetchTrash = useCallback(async () => {
                   <div className="flex items-center justify-center h-64 text-gray-400">
                     <span className="animate-pulse">Loading contents...</span>
                   </div>
-                ) : allItems.length === 0 ? (
+                ) : (isSearchMode && searchResults.length === 0) ? (
+                  <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl">
+                    <p className="text-lg font-medium text-center">No results for &quot;{searchQuery}&quot;</p>
+                  </div>
+                ) : (isSearchMode ? searchResults : allItems).length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl">
                     <p className="text-lg font-medium text-center">This folder is empty</p>
                     <p className="text-sm">Double click a folder to open or upload files.</p>
@@ -191,12 +263,16 @@ const fetchTrash = useCallback(async () => {
                 ) : (
                   view === 'grid' ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                      {allItems.map((item) => (
+                      {(isSearchMode ? searchResults : allItems).map((item) => (
                         <div key={`${item.type}-${item.id}`} onDoubleClick={() => handleFolderDoubleClick(item)}>
-                          <ContextMenu file={item}>
+                          <ContextMenu
+                              file={item}
+                              onDelete={handleMoveToTrash}
+                              onDownload={handleDownload}
+                            >
                             <FileCard
                               file={item}
-                              isSelected={selectedFile?.id === item.id}
+                              isSelected={isItemSelected(item)}
                               onSelect={() => handleSelectFile(item)}
                             />
                           </ContextMenu>
@@ -205,18 +281,24 @@ const fetchTrash = useCallback(async () => {
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <div className="grid grid-cols-[3fr_1fr_1fr_2fr] gap-4 px-4 py-2 text-xs font-medium text-gray-500 border-b dark:border-gray-700">
+                      <div className={`grid gap-4 px-4 py-2 text-xs font-medium text-gray-500 border-b dark:border-gray-700 ${isSearchMode ? 'grid-cols-[2fr_1fr_1fr_1.5fr_2fr]' : 'grid-cols-[3fr_1fr_1fr_2fr]'}`}>
                         <span>Name</span>
+                        {isSearchMode && <span>Path</span>}
                         <span>Type</span>
                         <span>Last Modified</span>
                       </div>
-                      {allItems.map((item) => (
+                      {(isSearchMode ? searchResults : allItems).map((item) => (
                         <div key={`${item.type}-${item.id}`} onDoubleClick={() => handleFolderDoubleClick(item)}>
-                          <ContextMenu file={item}>
+                          <ContextMenu
+                              file={item}
+                              onDelete={handleMoveToTrash}
+                              onDownload={handleDownload}
+                            >
                             <FileListItem
                               file={item}
-                              isSelected={selectedFile?.id === item.id}
+                              isSelected={isItemSelected(item)}
                               onSelect={() => handleSelectFile(item)}
+                              path={isSearchMode ? pathLabel : undefined}
                             />
                           </ContextMenu>
                         </div>

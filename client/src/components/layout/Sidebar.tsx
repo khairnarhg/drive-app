@@ -1,18 +1,20 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { HardDrive, Users, Clock, Trash2, Star, Tag } from 'lucide-react';
+import { HardDrive, Trash2 } from 'lucide-react';
 import React from 'react';
 import StorageMeter from './StorageMeter';
+import type { StorageStats } from '@/services/getStorageStats';
 
 export type ActiveView = 'drive' | 'trash';
 
 interface SidebarProps {
   activeView: ActiveView;
   onViewChange: (view: ActiveView) => void;
+  storageStats?: StorageStats | null;
 }
 
-const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
+const Sidebar = ({ activeView, onViewChange, storageStats }: SidebarProps) => {
    const mainLinks = [
     { name: 'My Drive', icon: HardDrive, view: 'drive' as ActiveView },
     { name: 'Trash', icon: Trash2, view: 'trash' as ActiveView },
@@ -54,21 +56,9 @@ const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
           ))}
         </div>
 
-        {/* Tags */}
-        {/* <div className="space-y-1 pt-4">
-          <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Tags</h3>
-          {tags.map((tag) => (
-            <a
-              key={tag.name}
-              href="#"
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-700/50"
-            >
-              <Tag className={`w-4 h-4 ${tag.color.replace('bg-', 'text-')}`} />
-              <span>{tag.name}</span>
-            </a>
-          ))}
-        </div> */}
       </div>
+
+      <StorageMeter stats={storageStats ?? null} />
     </aside>
   );
 };

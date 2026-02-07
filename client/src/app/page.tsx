@@ -29,7 +29,7 @@ export default async function HomePage() {
 
   return (
     <FileExplorer 
-      userData={userData} 
+      userData={userData.user} 
       initialFolderId={rootFolderId} 
       token={token} 
     />

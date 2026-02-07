@@ -30,8 +30,9 @@ export const uploadFiles = async (files: FileList | File[], folderId?: number, t
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Upload failed');
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error || (errorData.errors?.[0]?.error) || 'Upload failed';
+    throw new Error(message);
   }
 
   return response.json();

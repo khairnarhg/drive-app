@@ -20,7 +20,8 @@ interface ContextMenuProps {
   children: ReactNode;
   file: FileItem;
   context?: 'drive' | 'trash';
-  onDelete?: (fileId: string) => void;
+  onDelete?: (file: FileItem) => void;
+  onDownload?: (file: FileItem) => void;
   onRestore?: (fileId: string) => void;
   onDeletePermanently?: (fileId: string) => void;
 }
@@ -30,17 +31,17 @@ const ContextMenu = ({
   file,
   context = 'drive',
   onDelete,
+  onDownload,
   onRestore,
   onDeletePermanently
 }: ContextMenuProps) => {
 
-  // --- FIX: Explicitly apply the MenuItem[] type to the arrays ---
   const driveMenuItems: MenuItem[] = [
     { label: 'Get Info', icon: Info, action: () => alert('Get Info clicked') },
     { label: 'Rename', icon: Edit, action: () => alert('Rename clicked') },
     { label: 'Share', icon: Share2, separator: true, action: () => alert('Share clicked') },
-    { label: 'Download', icon: Download, action: () => alert('Download clicked') },
-    { label: 'Delete', icon: Trash2, color: 'text-red-500', action: () => onDelete?.(file.id) },
+    { label: 'Download', icon: Download, action: () => onDownload?.(file) },
+    { label: 'Delete', icon: Trash2, color: 'text-red-500', action: () => onDelete?.(file) },
   ];
 
   const trashMenuItems: MenuItem[] = [

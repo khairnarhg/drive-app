@@ -17,8 +17,18 @@ export const getFolderContents = async (folderId: number | string, token: string
   const data = await response.json();
   
   // We add the 'type' property manually so our UI components know how to render icons
-  data.folders = data.folders.map((f: any) => ({ ...f, type: 'folder' }));
-  data.files = data.files.map((f: any) => ({ ...f, type: 'file' }));
+  data.folders = data.folders.map((f: { id: number; name: string; created_at?: string }) => ({
+    ...f,
+    id: String(f.id),
+    type: 'folder' as const,
+    created_at: f.created_at ?? '',
+  }));
+  data.files = data.files.map((f: { id: number; name: string; size?: number; mime_type?: string; created_at?: string }) => ({
+    ...f,
+    id: String(f.id),
+    type: 'file' as const,
+    created_at: f.created_at ?? '',
+  }));
   
   return data;
 };

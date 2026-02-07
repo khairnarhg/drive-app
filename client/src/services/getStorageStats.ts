@@ -1,18 +1,23 @@
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+
 export interface StorageStats {
   total: number;
   used: number;
   remaining: number;
+  percentage_used?: number;
 }
 
-// 2. Create the function to fetch the stats
-export const getStorageStats = async (): Promise<StorageStats | null> => {
+export const getStorageStats = async (token: string): Promise<StorageStats | null> => {
   try {
-    // This path assumes you have a proxy/rewrite rule in next.config.js
-    // that forwards /api/storage/* to your Flask server's /storage/*
-    const response = await fetch('/api/storage/stats');
+    const response = await fetch(`${API_BASE_URL}/users/storage`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
     if (!response.ok) {
-      console.error("Failed to fetch storage stats:", response.statusText);
+      console.error('Failed to fetch storage stats:', response.statusText);
       return null;
     }
 
@@ -20,6 +25,6 @@ export const getStorageStats = async (): Promise<StorageStats | null> => {
     return data;
   } catch (error) {
     console.error('Error in getStorageStats:', error);
-    return null; // Return null on network error to prevent crashes
+    return null;
   }
 };

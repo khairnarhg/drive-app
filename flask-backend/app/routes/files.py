@@ -18,29 +18,37 @@ files_bp = Blueprint("files", __name__, url_prefix="/files")
 def upload_files():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
     if "files" not in request.files:
         return jsonify({"error": "No files part in the request"}), 400
 
-    files = request.files.getlist("files") # Get all files from the 'files' key
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "No files in request"}), 400
+
     folder_id = request.form.get("folder_id")
-    
-    # Handle folder validation once
     target_folder_id = None
-    if folder_id and folder_id.lower() != 'null':
+    if folder_id and str(folder_id).lower() != "null":
         folder = Folder.query.filter_by(id=folder_id, owner_id=user_id).first()
         if not folder:
             return jsonify({"error": "Invalid folder"}), 404
         target_folder_id = folder.id
 
+    # Ensure storage path is set before processing
+    storage_path = current_app.config.get("LOCAL_STORAGE_PATH")
+    if not storage_path:
+        return jsonify({"error": "Server storage path not configured (LOCAL_STORAGE_PATH)"}), 500
+
     results = []
     errors = []
 
     for file in files:
-        if file.filename == "": continue
+        if not file or not file.filename:
+            continue
 
         try:
-            # 1. Quota Check
             file.stream.seek(0, 2)
             file_size = file.stream.tell()
             file.stream.seek(0)
@@ -49,11 +57,9 @@ def upload_files():
                 errors.append({"file": file.filename, "error": "Quota exceeded"})
                 continue
 
-            # 2. Save to Disk
-            storage = LocalStorageService(current_app.config["LOCAL_STORAGE_PATH"])
+            storage = LocalStorageService(storage_path)
             storage_key = storage.save(file.stream)
 
-            # 3. DB Entry
             mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
             db_file = File(
                 name=file.filename,
@@ -65,7 +71,7 @@ def upload_files():
             )
             user.used_quota += file_size
             db.session.add(db_file)
-            db.session.commit() # Commit per file to ensure partial success works
+            db.session.commit()
 
             results.append({"id": db_file.id, "name": db_file.name})
 
@@ -73,10 +79,18 @@ def upload_files():
             db.session.rollback()
             errors.append({"file": file.filename, "error": str(e)})
 
+    if not results:
+        first_error = errors[0]["error"] if errors else "No valid files to upload"
+        return jsonify({
+            "error": first_error,
+            "uploaded": [],
+            "errors": errors,
+        }), 400
+
     return jsonify({
         "uploaded": results,
-        "errors": errors
-    }), 201 if results else 400
+        "errors": errors,
+    }), 201
 
 
 @files_bp.route("/<int:file_id>/download", methods=["GET"])
