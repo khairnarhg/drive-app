@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { FolderPlus, X } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
 import Button from '../common/Button';
 
 interface NewFolderModalProps {

@@ -35,7 +35,7 @@ export default function LoginForm({ onToggle }: { onToggle: () => void }) {
         setError(result?.error || "Invalid credentials");
         setLoading(false);
       }
-    } catch (err) {
+    } catch {
       // Network/Unexpected error
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
@@ -110,7 +110,7 @@ export default function LoginForm({ onToggle }: { onToggle: () => void }) {
 
       <div className="text-center mt-6">
         <p className="text-sm text-gray-500">
-          Haven't registered yet?{' '}
+          Haven&apos;t registered yet?{' '}
           <button 
             type="button" 
             onClick={onToggle} 

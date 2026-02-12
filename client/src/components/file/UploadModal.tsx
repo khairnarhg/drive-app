@@ -25,8 +25,8 @@ const UploadModal = ({ isOpen, onClose, onUploadComplete, currentFolderId, token
       await uploadFiles(acceptedFiles, currentFolderId, token);
       onUploadComplete?.(); // Refresh FileExplorer list
       onClose(); // Close modal
-    } catch (error: any) {
-      alert(`Upload failed: ${error.message}`);
+    } catch (error) {
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsUploading(false);
     }
@@ -69,7 +69,7 @@ const UploadModal = ({ isOpen, onClose, onUploadComplete, currentFolderId, token
                   <UploadCloud className={`w-8 h-8 ${isDragActive ? 'text-mac-selection' : 'text-gray-400'}`} />
                 </div>
                 <p className="text-sm font-medium dark:text-white">
-                  {isDragActive ? 'Drop them now!' : 'Drag & drop files here'}
+                  {isDragActive ? 'Drop them now!' : 'Drag &amp; drop files here'}
                 </p>
                 <p className="text-xs text-gray-500 mt-2">or click to browse from computer</p>
               </>

@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import SQLAlchemyError
 from app.models import File, Folder, User
 from app import db
-from app.services.storage import LocalStorageService
+from app.services.storage import get_storage_service
 import mimetypes
 import logging
 import os
@@ -36,10 +36,10 @@ def upload_files():
             return jsonify({"error": "Invalid folder"}), 404
         target_folder_id = folder.id
 
-    # Ensure storage path is set before processing
-    storage_path = current_app.config.get("LOCAL_STORAGE_PATH")
-    if not storage_path:
-        return jsonify({"error": "Server storage path not configured (LOCAL_STORAGE_PATH)"}), 500
+    try:
+        storage = get_storage_service(current_app.config)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 500
 
     results = []
     errors = []
@@ -57,7 +57,6 @@ def upload_files():
                 errors.append({"file": file.filename, "error": "Quota exceeded"})
                 continue
 
-            storage = LocalStorageService(storage_path)
             storage_key = storage.save(file.stream)
 
             mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
@@ -112,29 +111,30 @@ def download_file(file_id):
             logger.warning(f"User {user_id} attempted to download missing or unauthorized file: {file_id}")
             return jsonify({"error": "File not found"}), 404
 
-        # 2. Locate File on Disk
-        storage = LocalStorageService(current_app.config["LOCAL_STORAGE_PATH"])
+        # 2. Get Storage Service
+        storage = get_storage_service(current_app.config)
         
-        # Construct the absolute path
-        # Using os.path.abspath ensures we resolve any potential ".." traversal, 
-        # though joining with a trusted config path is usually safe.
-        file_path = os.path.join(storage.base_path, file.storage_key)
-
-        # 3. Data Integrity Check
-        # This catches the critical "Orphan Record" edge case
-        if not os.path.exists(file_path):
-            logger.critical(f"DATA INTEGRITY ERROR: DB record {file.id} exists, but file missing on disk at {file_path}")
-            return jsonify({"error": "File system error: Content missing"}), 500
-
-        # 4. Serve File
-        logger.info(f"Serving file download: {file.id} for user {user_id}")
-        
-        return send_file(
-            file_path,
-            as_attachment=True,
-            download_name=file.name,
-            mimetype=file.mime_type
-        )
+        # 3. Handle S3/R2 vs Local Storage
+        if hasattr(storage, 'get_download_url'):
+            # S3/R2: Generate presigned URL and redirect
+            download_url = storage.get_download_url(file.storage_key)
+            logger.info(f"Redirecting to S3/R2 download URL for file {file.id}")
+            from flask import redirect
+            return redirect(download_url)
+        else:
+            # Local: Serve file directly
+            file_path = storage.get_file_path(file.storage_key)
+            if not os.path.exists(file_path):
+                logger.critical(f"DATA INTEGRITY ERROR: DB record {file.id} exists, but file missing at {file_path}")
+                return jsonify({"error": "File system error: Content missing"}), 500
+            
+            logger.info(f"Serving file download: {file.id} for user {user_id}")
+            return send_file(
+                file_path,
+                as_attachment=True,
+                download_name=file.name,
+                mimetype=file.mime_type
+            )
 
     except SQLAlchemyError as e:
         logger.error(f"Database error during download for file {file_id}: {str(e)}")
@@ -263,26 +263,26 @@ def delete_file_permanently(file_id):
         if not file:
             return jsonify({"error": "File not found"}), 404
 
-        # 2. Define File Path
-        file_path = os.path.join(
-            current_app.config["LOCAL_STORAGE_PATH"],
-            file.storage_key
-        )
-
-        # 3. Delete from Disk
-        # We attempt this BEFORE DB commit. If disk deletion fails (e.g., permission denied),
-        # we abort the whole operation so the DB stays in sync.
-        file_deleted_from_disk = False
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                file_deleted_from_disk = True
-            except OSError as e:
-                logger.error(f"Failed to delete file from disk: {file_path}. Error: {e}")
-                return jsonify({"error": "System error: Could not delete file from storage"}), 500
-        else:
-            logger.warning(f"File {file_id} marked for deletion but missing on disk.")
-            # We proceed to delete from DB even if missing on disk (self-healing)
+        # 2. Get Storage Service and Delete File
+        try:
+            storage = get_storage_service(current_app.config)
+            storage.delete(file.storage_key)
+        except ValueError as e:
+            # Storage config error
+            logger.error(f"Storage configuration error: {e}")
+            return jsonify({"error": "Storage configuration error"}), 500
+        except Exception as e:
+            logger.error(f"Failed to delete file from storage: {file.storage_key}. Error: {e}")
+            # For S3/R2, deletion might fail if file doesn't exist - we proceed anyway
+            # For local storage, check if file exists first
+            if hasattr(storage, 'get_file_path'):
+                try:
+                    file_path = storage.get_file_path(file.storage_key)
+                    if os.path.exists(file_path):
+                        return jsonify({"error": "System error: Could not delete file from storage"}), 500
+                except:
+                    pass
+            logger.warning(f"File {file_id} marked for deletion but missing in storage.")
 
         # 4. Update Database (Quota & Status)
         try:

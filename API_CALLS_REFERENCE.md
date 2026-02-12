@@ -53,3 +53,6 @@ Base URL: `NEXT_PUBLIC_API_URL` (e.g. `http://localhost:5000`). All authenticate
 5. **Storage** – Check sidebar storage bar after upload/delete/restore.
 
 All of the above use the backend at `NEXT_PUBLIC_API_URL`; ensure `.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:5000` (or your backend URL).
+
+
+
