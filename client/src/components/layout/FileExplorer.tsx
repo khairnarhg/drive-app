@@ -169,6 +169,8 @@ const fetchTrash = useCallback(async () => {
       if (currentFolder) fetchContents(currentFolder.id);
       else fetchContents(initialFolderId);
     }
+    // Intentionally only depend on activeView and fetchTrash to avoid refetch loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, fetchTrash]);
 
   const handleRestore = async (fileId: string) => {
