@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { X, Folder, FileText, Download, Trash2 } from 'lucide-react';
 import { FileItem } from '@/types/file';
-import { formatBytes } from '@/lib/utils';
+import { formatBytes, getDisplayFileType } from '@/lib/utils';
 import { downloadSingleFile } from '@/services/downloadSingleFile';
 import { moveFileToTrash } from '@/services/trashService';
 import { useState } from 'react';
@@ -120,7 +120,7 @@ const FilePreview = ({ file, onClose, onDeleteComplete, token }: FilePreviewProp
             <div className="text-sm space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Type</span> 
-                  <span className="font-medium">{file.type === 'folder' ? 'Folder' : 'File'}</span>
+                  <span className="font-medium">{file.type === 'folder' ? 'Folder' : getDisplayFileType(file.mime_type, file.name)}</span>
                 </div>
                 {file.size && (
                   <div className="flex justify-between">

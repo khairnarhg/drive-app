@@ -7,6 +7,9 @@ from app.services.storage import get_storage_service
 import mimetypes
 import logging
 import os
+from io import BytesIO
+from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -57,7 +60,7 @@ def upload_files():
                 errors.append({"file": file.filename, "error": "Quota exceeded"})
                 continue
 
-            storage_key = storage.save(file.stream)
+            storage_key = storage.save(file.stream, filename=file.filename)
 
             mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
             db_file = File(
@@ -76,7 +79,16 @@ def upload_files():
 
         except Exception as e:
             db.session.rollback()
-            errors.append({"file": file.filename, "error": str(e)})
+            error_msg = str(e)
+            # Check for Cloudinary-specific errors
+            if "untrusted" in error_msg.lower() or "show_original_customer_untrusted" in error_msg.lower():
+                logger.error(f"Cloudinary account restriction for file {file.filename}: {error_msg}")
+                errors.append({
+                    "file": file.filename, 
+                    "error": "Cloudinary account restriction. Please check your Cloudinary dashboard or contact support."
+                })
+            else:
+                errors.append({"file": file.filename, "error": error_msg})
 
     if not results:
         first_error = errors[0]["error"] if errors else "No valid files to upload"
@@ -114,13 +126,29 @@ def download_file(file_id):
         # 2. Get Storage Service
         storage = get_storage_service(current_app.config)
         
-        # 3. Handle S3/R2 vs Local Storage
+        # 3. Handle remote storage (Cloudinary/S3/R2) vs Local Storage
         if hasattr(storage, 'get_download_url'):
-            # S3/R2: Generate presigned URL and redirect
-            download_url = storage.get_download_url(file.storage_key)
-            logger.info(f"Redirecting to S3/R2 download URL for file {file.id}")
-            from flask import redirect
-            return redirect(download_url)
+            # Remote: fetch file server-side and stream to client so the browser
+            # never follows a redirect (which would drop Authorization and can cause 401 from CDN).
+            logger.info(f"Proxying download for file {file.id} from remote storage")
+            try:
+                # Prefer authenticated download method if available (for Cloudinary)
+                if hasattr(storage, 'download_file_content'):
+                    content = storage.download_file_content(file.storage_key)
+                else:
+                    # Fallback: use signed URL with urlopen (for S3/R2)
+                    download_url = storage.get_download_url(file.storage_key)
+                    with urlopen(download_url, timeout=60) as resp:
+                        content = resp.read()
+            except (URLError, HTTPError, OSError, Exception) as e:
+                logger.error(f"Failed to fetch file from storage for file {file.id}: {e}")
+                return jsonify({"error": "Could not retrieve file from storage"}), 502
+            return send_file(
+                BytesIO(content),
+                as_attachment=True,
+                download_name=file.name,
+                mimetype=file.mime_type,
+            )
         else:
             # Local: Serve file directly
             file_path = storage.get_file_path(file.storage_key)

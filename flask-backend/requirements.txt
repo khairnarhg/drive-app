@@ -24,3 +24,9 @@ gunicorn==23.0.0
 
 # S3-compatible storage (for Cloudflare R2)
 boto3==1.35.0
+
+# Cloudinary (media/file storage)
+cloudinary==1.36.0
+
+# HTTP requests (for Cloudinary authenticated downloads)
+requests==2.31.0
