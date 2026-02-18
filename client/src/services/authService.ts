@@ -50,7 +50,7 @@ export const getUserProfile = async (token: string) => {
     });
     if (!response.ok) return null;
     return await response.json();
-  } catch (error) {
+  } catch {
     return null;
   }
 };

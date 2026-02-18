@@ -3,7 +3,6 @@
 import { FileItem } from '@/types/file';
 import { formatBytes } from '@/lib/utils';
 import { RotateCcw, Trash2 } from 'lucide-react';
-import ContextMenu from '../common/ContextMenu';
 
 interface TrashViewProps {
   files: FileItem[];

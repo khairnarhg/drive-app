@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { Search, Settings, LogOut, Moon, Sun } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useTheme } from 'next-themes';
@@ -50,10 +51,14 @@ const Topbar = ({ userData, searchQuery = '', onSearchChange }: TopbarProps) => 
                 {/* Profile Dropdown */}
                 <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                        <button className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-mac-selection">
-                            <img 
+                        <button className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-mac-selection relative">
+                            <Image 
                                 src={`https://avatar.vercel.sh/${userData?.email || 'guest'}`} 
-                                alt="User Avatar" 
+                                alt="User Avatar"
+                                width={32}
+                                height={32}
+                                className="object-cover"
+                                unoptimized
                             />
                         </button>
                     </DropdownMenu.Trigger>

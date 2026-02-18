@@ -38,7 +38,7 @@ const Sidebar = ({ activeView, onViewChange, storageStats }: SidebarProps) => {
       <div className="space-y-4">
         {/* Main Links */}
         <div className="space-y-1">
-          {mainLinks.map((link, index) => (
+          {mainLinks.map((link) => (
             <button
               key={link.name}
               onClick={() => onViewChange(link.view)}

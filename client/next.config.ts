@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'avatar.vercel.sh', pathname: '/**' },
+    ],
+  },
   // 1. Correct way to handle cross-origin for Server Actions
   experimental: {
     serverActions: {
